@@ -1,0 +1,1 @@
+#define alecs 10
