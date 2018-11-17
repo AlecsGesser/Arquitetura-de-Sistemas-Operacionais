@@ -1,19 +1,21 @@
 #include "test.hpp"
 
 void mark_file(int i, int j, char* namefile, char* data);
+void read_inodes();
 
-void file_write(char* name, char* data){
+void file_write(char* name, char* data)
+{
 	int bit;
-
 	inode temp;
-	rewind(fp);
+
+	fseek(fp, 0, SEEK_SET);
 	for (int i = 0; i < 200; i++)
 	{
 		fread(&bit, sizeof(int), 1, fp);
 		if(bit == 0)
 		{
-			fseek(fp, 200-i , SEEK_SET);
-			for (int j = 0; j < inode_qnt*sizeof(inode); j++)
+			fseek(fp, blocks*sizeof(int), SEEK_SET);
+			for (int j = 0; j < inode_qnt; j++)
 			{
 				fread(&temp, sizeof(inode), 1, fp);
 				if( temp.used == 0)
@@ -27,38 +29,147 @@ void file_write(char* name, char* data){
 	}
 }
 
-void mark_file(int i, int j, char* namefile, char* data){
-
+void mark_file(int i, int j, char* namefile, char* data)
+{
 	int temp=1;
-	cout<<i<<endl;
-	cout<<j<<endl;
-	cout<<namefile<<endl;
 
-	fseek(fp, i, SEEK_SET);
+	// marking bit map
+
+	fseek(fp, i*sizeof(int), SEEK_SET);
 	fwrite(&temp, sizeof(int), 1, fp);
 
+
+	// creating struct temp for add to te memory
 	inode aux;
 	strcpy(aux.name, namefile);
 	strcpy(aux.type, "file");
 	aux.used = 1;
-	aux.addr_i = ( blocks + ( inode_qnt * sizeof(inode) ) + (i*block_size));
+	aux.parent_addr = current_DIR;
+	aux.addr_i = ( blocks*sizeof(int) + ( inode_qnt * sizeof(inode) ) + (i*block_size));
 	aux.addr_f = aux.addr_i + block_size; // * number_blocks;
-	cout<<"ola"<<endl;
+
+   fseek(fp, ( blocks*sizeof(int) + j*sizeof(inode) ), SEEK_SET);
+	fwrite(&aux, sizeof(inode), 1, fp);
 
 
-	fseek(fp, (blocks+j*sizeof(inode)), SEEK_SET);
-	fwrite(&aux, sizeof(inode),1,fp);
+	// reading current DIR
+	fseek(fp, current_DIR*sizeof(inode), SEEK_SET);
+	fread(&aux, sizeof(inode), 1, fp);
+
+	// adding data to the 3rd layers
+	char buf[50];
+	for (size_t i = 0; i < 50; i++)
+	{
+		buf[i] = data[i];
+	}
+	//strcpy(data, buf);
+
+	int addr = aux.addr_i;
+
+	fseek(fp,addr, SEEK_SET);
+	fwrite(&buf, sizeof(char), strlen(buf), fp);
+
+	// referecing nodes vector
+ 	fseek(fp, current_DIR, SEEK_SET);
+ 	fread(&aux, sizeof(inode),1, fp);
+
+
+
+	for (int x = 0; x < 10; x++)
+	{
+		if( aux.nodes[x] == -1 )
+		{
+			cout<<x<<endl;
+			aux.nodes[x] = (blocks*sizeof(int) + j*sizeof(inode));
+			cout<<aux.nodes[x]<<endl;
+			fseek(fp, current_DIR, SEEK_SET);
+			fwrite(&aux, sizeof(inode),1, fp);
+			break;
+		}
+	}
+}
+
+void read_inodes()
+{
+	inode aux;
+
+	fseek(fp, blocks*sizeof(int), SEEK_SET);
+
+	for (int i = 0; i < 10; i++)
+	{
+		fread(&aux, sizeof(inode), 1, fp);
+		cout<<"{ name: "<<aux.name
+			 <<"| type: "<<aux.type
+			 <<"| addr_i: "<<aux.addr_i
+			 <<"| addr_f: "<<aux.addr_f
+			 <<"| parent: "<<aux.parent_addr
+			 <<"| node: "<<aux.nodes[0]<<"||"<<aux.nodes[1]<<"||"<<aux.nodes[2]
+			 <<"}"<<endl;
+		cout<<sizeof(inode)<<endl;
+		cout<<i<<endl<<endl;
+	}
+}
+
+
+void read_file(char* namefile)
+{
+	inode aux, aux2;
+	char dado[50];
 
 	fseek(fp, current_DIR, SEEK_SET);
-	fread(&aux, sizeof(inode),1, fp);
+	fread(&aux, sizeof(inode), 1, fp);
+	for(int i = 0; i < 10 ; i++)
+	{
+		if( aux.nodes[i] != -1)
+		{
+			fseek(fp, aux.nodes[i], SEEK_SET);
+			fread(&aux2, sizeof(inode), 1, fp);
+			if(strcmp(namefile, aux2.name) == 0 && aux2.type[0] == 'f')
+			{
+				fseek(fp, aux2.addr_i, SEEK_SET);
+				fread(&dado, aux2.addr_f - aux2.addr_i, 1, fp);
+				cout<<"dados::::: "<<dado<<endl;
+			}
+		}
+	}
+}
 
+void dir_write(char* name)
+{
+	inode aux,aux2;
+	fseek(fp, blocks*sizeof(int), SEEK_SET);
+	for(int i = 0; i < inode_qnt; i++)
+	{
+		fread(&aux, sizeof(inode), 1, fp);
+		if( aux.used == 0 )
+		{
+			strcpy(aux2.type, "dir");
+			strcpy(aux2.name, name);
+			aux2.addr_i=-1;
+			aux2.addr_f=-1;
+			aux2.parent_addr=current_DIR;
 
+			fseek(fp, blocks*sizeof(int) + i*sizeof(inode), SEEK_SET);
+			fwrite(&aux2, sizeof(inode),1,fp);
 
-
-
-
-
-
+			// referenciing inode on the current folder
+			fseek(fp, current_DIR, SEEK_SET);
+		 	fread(&aux2, sizeof(inode),1, fp);
+			for (int x = 0; x < 10; x++)
+			{
+				if( aux2.nodes[x] == -1 )
+				{
+					cout<<x<<endl;
+					aux2.nodes[x] = (blocks*sizeof(int) + i*sizeof(inode));
+					cout<<aux2.nodes[x]<<endl;
+					fseek(fp, current_DIR, SEEK_SET);
+					fwrite(&aux2, sizeof(inode),1, fp);
+					break;
+				}
+			}
+			break;
+		}
+	}
 }
 
 
@@ -68,17 +179,13 @@ int main()
 	int temp=5;
 
 	initialize_bin();
+	file_write("filename","data content");
+	file_write("FILENAME","data content SECOND");
+	//read_file("FILENAME");
+	dir_write("nova pasta");
+ 	read_inodes();
 
-	file_write("alexinho","caio baitolassa");
 
-	struct inode out;
-
-	// fseek(fp, 200, SEEK_SET);
-	// fread(&out, sizeof(struct inode), 1, fp);
-	// cout<<out.name<<endl;
-	// cout<<out.used<<endl;
-	// cout<<out.addr_f<<endl;
-	// cout<<out.addr_i<<endl;
 
 	fclose(fp);
 	return 0;
@@ -100,6 +207,8 @@ void initialize_bin()
 	blank.addr_i = 0;
 	blank.addr_f = 0;
 	blank.parent_addr = 0;
+
+	//blank.nodes =  {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
 	for (int i = 0; i < blocks; i++)
 	{
 		fwrite(&temp, sizeof(int),1,fp); // populando memoria de inodes com inodes vazios
@@ -107,7 +216,8 @@ void initialize_bin()
 
 
 
-	fseek(fp, blocks, SEEK_SET);
+	fseek(fp, blocks*sizeof(int), SEEK_SET);
+
 	for (int i = 0; i < inode_qnt; i++)
 	{
 		fwrite(&blank, sizeof(inode),1,fp); // populando memoria de inodes com inodes vazios
@@ -121,13 +231,19 @@ void initialize_bin()
 	root.addr_f = -1;
 	root.parent_addr = -1;
 
-	fseek(fp, 200, SEEK_SET);  // pulando para memoria de inodes
+	//root.nodes = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
 
+	fseek(fp, blocks*sizeof(int), SEEK_SET);  // pulando para memoria de inodes
 	fwrite(&root, sizeof(inode), 1, fp);
 
-	fseek(fp, ( blocks +  (inode_qnt * sizeof(inode))  + block_size) , SEEK_SET);
-	for (int i = 0; i < block_size; i++) {
-		fwrite(&temp, sizeof(int), 1, fp);
+
+
+	fseek(fp, ( blocks*sizeof(int) +  (inode_qnt * sizeof(inode)) ) , SEEK_SET);
+
+
+	for (int i = 0; i < blocks*block_size; i++)
+	{
+		fwrite(&temp, sizeof(char), 1, fp);
 	}
 
 
