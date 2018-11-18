@@ -1,3 +1,6 @@
+#ifndef MEMIO_HPP
+#define MEMIO_HPP
+
 #include <stdio.h>
 #include <iostream>
 #include <cstring>
@@ -9,14 +12,8 @@
 #define block_size 50 //bytes
 using namespace std;
 
-void initialize_bin();
-void  node_write(struct inode input);
-
 FILE *fp;
 int current_DIR= sizeof(int)*blocks;
-
-void file_write();
-void dir_write();
 
 struct inode{
 	char type[5];
@@ -27,7 +24,15 @@ struct inode{
 	int parent_addr;
 	int nodes[10] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
 };
-
-
-
 typedef struct inode inode;
+
+
+void file_write(char* name, char* data);
+void mark_file(int i, int j, char* namefile, char* data);
+void read_inodes();
+void read_file(char* namefile);
+void dir_write(char* name);
+void initialize_bin();
+
+
+#endif // MEMIO_DEFINED

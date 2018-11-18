@@ -1,6 +1,29 @@
-#include "test.hpp"
+
+#ifndef MEMIO_HPP
+#define MEMIO_HPP
+
+#include <stdio.h>
+#include <cstring>
+#include <vector>
+#include <array>
+
+#define inode_qnt  20
+#define blocks     200
+#define block_size 50 //bytes
 
 
+FILE *fp;
+int current_DIR= sizeof(int)*blocks;
+
+struct inode{
+	char type[5];
+	int used;
+	char name[15];
+	int addr_i;
+	int addr_f;
+	int parent_addr;
+	int nodes[10] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
+};
 
 void file_write(char* name, char* data)
 {
@@ -78,9 +101,9 @@ void mark_file(int i, int j, char* namefile, char* data)
 	{
 		if( aux.nodes[x] == -1 )
 		{
-			cout<<x<<endl;
+			// cout<<x<<endl;
 			aux.nodes[x] = (blocks*sizeof(int) + j*sizeof(inode));
-			cout<<aux.nodes[x]<<endl;
+			// cout<<aux.nodes[x]<<endl;
 			fseek(fp, current_DIR, SEEK_SET);
 			fwrite(&aux, sizeof(inode),1, fp);
 			break;
@@ -97,15 +120,15 @@ void read_inodes()
 	for (int i = 0; i < 10; i++)
 	{
 		fread(&aux, sizeof(inode), 1, fp);
-		cout<<"{ name: "<<aux.name
-			 <<"| type: "<<aux.type
-			 <<"| addr_i: "<<aux.addr_i
-			 <<"| addr_f: "<<aux.addr_f
-			 <<"| parent: "<<aux.parent_addr
-			 <<"| node: "<<aux.nodes[0]<<"||"<<aux.nodes[1]<<"||"<<aux.nodes[2]
-			 <<"}"<<endl;
-		cout<<sizeof(inode)<<endl;
-		cout<<i<<endl<<endl;
+		// cout<<"{ name: "<<aux.name
+		// 	 <<"| type: "<<aux.type
+		// 	 <<"| addr_i: "<<aux.addr_i
+		// 	 <<"| addr_f: "<<aux.addr_f
+		// 	 <<"| parent: "<<aux.parent_addr
+		// 	 <<"| node: "<<aux.nodes[0]<<"||"<<aux.nodes[1]<<"||"<<aux.nodes[2]
+		// 	 <<"}"<<endl;
+		// cout<<sizeof(inode)<<endl;
+		// cout<<i<<endl<<endl;
 	}
 }
 
@@ -127,7 +150,7 @@ void read_file(char* namefile)
 			{
 				fseek(fp, aux2.addr_i, SEEK_SET);
 				fread(&dado, aux2.addr_f - aux2.addr_i, 1, fp);
-				cout<<"dados::::: "<<dado<<endl;
+				// cout<<"dados::::: "<<dado<<endl;
 			}
 		}
 	}
@@ -158,9 +181,9 @@ void dir_write(char* name)
 			{
 				if( aux2.nodes[x] == -1 )
 				{
-					cout<<x<<endl;
+					// cout<<x<<endl;
 					aux2.nodes[x] = (blocks*sizeof(int) + i*sizeof(inode));
-					cout<<aux2.nodes[x]<<endl;
+					// cout<<aux2.nodes[x]<<endl;
 					fseek(fp, current_DIR, SEEK_SET);
 					fwrite(&aux2, sizeof(inode),1, fp);
 					break;
@@ -247,3 +270,5 @@ void initialize_bin()
 
 
 }
+
+#endif // MEMIO_DEFINED
