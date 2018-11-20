@@ -15,7 +15,7 @@
   #include <dirent.h>
 #include <arpa/inet.h>
        #include <signal.h>
-  #define porta 8888
+  #define porta 8088
 
   #include "test.hpp"
 
@@ -23,14 +23,16 @@
   void *connection_handler(void *welcomeSocket);
 
   // operations
-  void create_file(int sock, char* name);
-  void remove_file(int sock, char* name);
-  void edit_file(int sock, char* name);
-  void show_file(int sock, char* name);
-  void cd_directory(int sock, int current_DIR, char* name);
-  void list_directory(int sock,int& current_dir);
-  void create_dir(int sock, char* name, int& current_dir);
-  void rmv_dir(int sock, char* name);
+  void create_file(int sock, char* name, int current_dir);
+  int mark_file(int sock, int i, int j, char* namefile,  int current_dir);
+  void remove_file(int sock, char* name, int current_dir);
+  void  edit_file(int sock, char* name, int current_dir);
+  void show_file(int sock, char* namefile, int current_dir);
+  void cd_directory(int sock, char* name, int& current_dir);
+  void list_directory(int sock, int current_dir);
+  void create_dir(int sock, char* name, int current_dir);
+  void rmv_dir(int sock, char* name, int current_dir);
+  void rmv_dir_rec(int sock, char* name, int current_dir);
 
   pthread_mutex_t lock;
 
@@ -170,37 +172,37 @@
         else if (strcmpst1nl(op,"rmdir") == 0)
         {
           pthread_mutex_lock(&lock);
-          rmv_dir(sock, name);
+          rmv_dir(sock, name, current_dir);
           pthread_mutex_unlock(&lock);
         }
         else if(strcmpst1nl(op, "mkfile") == 0)
         {
         //  pthread_mutex_lock(&lock);
-          create_file(sock, name);
+          create_file(sock, name, current_dir);
         //  pthread_mutex_unlock(&lock);
         }
         else if(strcmpst1nl(op, "rmfile") == 0)
         {
           pthread_mutex_lock(&lock);
-          remove_file(sock, name);
+          remove_file(sock, name, current_dir);
           pthread_mutex_unlock(&lock);
         }
         else if(strcmpst1nl(op,"edit") == 0)
         {
           pthread_mutex_lock(&lock);
-          edit_file(sock, name);
+          edit_file(sock, name, current_dir);
           pthread_mutex_unlock(&lock);
         }
         else if(strcmpst1nl(op, "show") == 0)
         {
           pthread_mutex_lock(&lock);
-          show_file(sock, name);
+          show_file(sock, name, current_dir);
           pthread_mutex_unlock(&lock);
         }
         else if(strcmpst1nl(op,"cd") == 0)
         {
         //  pthread_mutex_lock(&lock);
-          cd_directory(sock, current_DIR, name);
+          cd_directory(sock, name, current_dir);
         //  pthread_mutex_unlock(&lock);
         }
         else if(strcmpst1nl(op, "ls") == 0)
@@ -238,13 +240,14 @@
       }
 }
 
-  void list_directory(int sock, int& current_dir)
+  void list_directory(int sock, int current_dir)
   {
      inode aux,aux2;
      int cont=0;
      char msg[1024] = "";
      fseek(fp, current_dir, SEEK_SET);
      fread(&aux, sizeof(inode),1,fp);
+    // printf("location:  %s", aux.name);
      for(int i = 0 ; i < 10 ; i++){
         if( aux.nodes[i] != -1){
            fseek(fp, aux.nodes[i], SEEK_SET);
@@ -274,8 +277,47 @@
     // send(sock, msg, strlen(msg), 0);
 }
 
-  void cd_directory(int sock, int current_dir, char* name)
+  void cd_directory(int sock, char* name, int& current_dir)
   {
+     char msg[1024] = "";
+     inode aux, aux2;
+
+     if( name[0] == '.' && name[1] == '.')
+     {
+        fseek(fp, current_dir, SEEK_SET);
+        fread(&aux, sizeof(inode), 1, fp);
+        if( aux.parent_addr == -1)
+        {
+           strcpy(msg,"Error already on ROOT");
+           send(sock, msg, strlen(msg), 0 );
+           return;
+        }
+        else
+        {
+           current_dir = aux.parent_addr;
+           strcpy(msg,"Sucess cd");
+           send(sock, msg, strlen(msg), 0 );
+           return;
+        }
+     }
+     fseek(fp, current_dir, SEEK_SET);
+     fread(&aux, sizeof(inode), 1, fp);
+     for(int i = 0 ; i < 10 ; i++)
+     {
+        fseek(fp, aux.nodes[i], SEEK_SET);
+        fread(&aux2, sizeof(inode), 1, fp);
+        if( strcmp( aux2.name, name) == 0 && aux2.type[0] == 'd' )
+        {
+           current_dir = aux.nodes[i];
+           strcpy(msg,"Sucess cd");
+           send(sock, msg, strlen(msg), 0 );
+           return;
+        }
+     }
+
+     strcpy(msg,"Failed cd");
+     send(sock, msg, strlen(msg), 0 );
+
     // FILE* fp;
     // char msg[1024];
     // int read_size;
@@ -295,8 +337,32 @@
     // }
   }
 
-  void show_file(int sock, char* name)
+  void show_file(int sock, char* namefile, int current_dir)
   {
+      inode aux, aux2;
+   	char dado[1024];
+
+   	fseek(fp, current_dir, SEEK_SET);
+   	fread(&aux, sizeof(inode), 1, fp);
+   	for(int i = 0; i < 10 ; i++)
+   	{
+   		if( aux.nodes[i] != -1)
+   		{
+   			fseek(fp, aux.nodes[i], SEEK_SET);
+   			fread(&aux2, sizeof(inode), 1, fp);
+   			if(strcmp(namefile, aux2.name) == 0 && aux2.type[0] == 'f')
+   			{
+   				fseek(fp, aux2.addr_i, SEEK_SET);
+   				fread(&dado, aux2.addr_f - aux2.addr_i, 1, fp);
+   				send(sock, dado, strlen(dado), 0);
+               return ;
+   			}
+   		}
+   	}
+
+      strcpy(dado, "Failed opening");
+      send(sock, dado, strlen(dado),0);
+
     // FILE* fp;
     // char msg[1024];
     // int read_size;
@@ -315,7 +381,40 @@
 
   }
 
-  void  edit_file(int sock, char* name){
+  void  edit_file(int sock, char* name, int current_dir){
+
+     inode aux,aux2;
+     int cont=0;
+     char msg[1024] = "";
+     char buf[1024] = "";
+
+     fseek(fp, current_dir, SEEK_SET);
+     fread(&aux, sizeof(inode),1,fp);
+     for(int i = 0 ; i < 10 ; i++){
+        if( aux.nodes[i] != -1){
+           fseek(fp, aux.nodes[i], SEEK_SET);
+           fread(&aux2, sizeof(inode),1,fp);
+           if( strcmp(aux2.name, name) == 0 )
+           {
+              fseek(fp, aux2.addr_i, SEEK_SET);
+              strcpy(msg,"Type your text: ");
+              send(sock, msg, strlen(msg), 0 );
+              int read_size = read(sock, buf, 1024);
+              buf[read_size-1] = '\0';
+              fwrite(&buf, sizeof(char), strlen(buf), fp);
+              strcpy(msg, "Sucess edit");
+              send(sock, msg, strlen(msg), 0);
+              return;
+           }
+        }
+     }
+
+     strcpy(msg, "Failed edit");
+     send(sock, msg, strlen(msg), 0);
+
+
+
+
     // FILE* fp;
     // char msg[1024];
     // int read_size;
@@ -345,8 +444,63 @@
   }
 
 
-  void remove_file(int sock, char* name)
+  void remove_file(int sock, char* name, int current_dir)
   {
+     inode aux,aux2, blank;
+     int cont=0, zero=0, addr_temp;
+     char msg[1024] = "";
+     char buf[1024] = "";
+
+     int temp=0;
+
+     blank.used = 0;
+  	  strcpy(blank.name, "blank");
+  	  strcpy(blank.type, "none");
+  	  blank.addr_i = 0;
+  	  blank.addr_f = 0;
+  	  blank.parent_addr = 0;
+
+
+
+
+     fseek(fp, current_dir, SEEK_SET);
+     fread(&aux, sizeof(inode),1,fp);
+     for(int i = 0 ; i < 10 ; i++){
+       if( aux.nodes[i] != -1){
+          fseek(fp, aux.nodes[i], SEEK_SET);
+          fread(&aux2, sizeof(inode),1,fp);
+          if( strcmp(aux2.name, name) == 0 && aux2.type[0] == 'f' )
+          {
+
+             // finding bit map refered
+            addr_temp = aux2.addr_i - ( blocks*sizeof(int) + ( inode_qnt * sizeof(inode) ) );
+            addr_temp = addr_temp/block_size;
+            fseek(fp, addr_temp*sizeof(int), SEEK_SET);
+            fwrite(&zero, sizeof(int), 1, fp);
+
+            // writing blank inode
+            fseek(fp, aux.nodes[i], SEEK_SET);
+            fwrite(&blank, sizeof(inode), 1, fp);
+
+            // altering reference inodes nodes
+            fseek(fp, current_dir, SEEK_SET);
+            fread(&aux, sizeof(inode), 1, fp);
+            aux.nodes[i] = -1;
+            fseek(fp, current_dir, SEEK_SET);
+            fwrite(&aux, sizeof(inode), 1, fp);
+
+            strcpy(msg, "Sucess remove_file");
+            send(sock, msg, strlen(msg), 0);
+            return;
+          }
+       }
+     }
+
+     strcpy(msg, "Failed remove_file");
+     send(sock, msg, strlen(msg), 0);
+
+
+
     // char msg[1024];
     // int read_size;
     // if ( remove(name) != 0) {
@@ -360,10 +514,87 @@
     // }
   }
 
-
-
-  void create_file(int sock, char* name)
+  void remove_file_rec(int sock, int dir)
   {
+     inode aux,aux2, blank;
+     int cont=0, zero=0, addr_temp;
+     char msg[1024] = "";
+     char buf[1024] = "";
+
+     int temp=0;
+
+
+     blank.used = 0;
+     strcpy(blank.name, "blank");
+     strcpy(blank.type, "none");
+     blank.addr_i = 0;
+     blank.addr_f = 0;
+     blank.parent_addr = 0;
+
+     fseek(fp, dir, SEEK_SET);
+     fread(&aux, sizeof(inode), 1, fp);
+
+     // calc block map bit position
+     addr_temp = aux.addr_i - ( blocks*sizeof(int) + ( inode_qnt * sizeof(inode) ) );
+     addr_temp = addr_temp/block_size;
+     fseek(fp, addr_temp*sizeof(int), SEEK_SET);
+     fwrite(&zero, sizeof(int), 1, fp);
+
+     // writing blank inode
+     fseek(fp, dir, SEEK_SET);
+     fwrite(&blank, sizeof(inode), 1, fp);
+
+     return;
+  }
+
+
+
+
+
+  void create_file(int sock, char* name, int current_dir)
+  {
+     int bit;
+     inode temp;
+     char msg[1024];
+     int returned = 2 ;
+     fseek(fp,0,SEEK_SET);
+     for(int i = 0 ; i < blocks; i++)
+     {
+        fread(&bit, sizeof(int), 1, fp);
+        if(bit == 0)
+        {
+           fseek(fp, blocks*sizeof(int), SEEK_SET);
+           for(int j = 0 ; j < inode_qnt; j++)
+           {
+             fread(&temp, sizeof(inode), 1, fp);
+             if( temp.used == 0)
+             {
+                returned = mark_file(sock, i, j, name, current_dir);
+                break;
+             }
+          }
+          break;
+        }
+     }
+
+     if( returned == 1)
+     {
+        strcpy(msg,"Failed to create file");
+        send(sock,msg,strlen(msg),0);
+     }
+     if( returned == 0)
+     {
+        strcpy(msg,"File created with success");
+        send(sock,msg,strlen(msg),0);
+     }
+     if( returned == 2)
+     {
+        strcpy(msg,"Fail Unknown");
+        send(sock,msg,strlen(msg),0);
+     }
+
+
+
     // FILE* fp;
     // char msg[1024];
     // int read_size;
@@ -382,11 +613,62 @@
     // fclose(fp);
   }
 
-  void create_dir(int sock, char* name, int& current_dir)
+  int mark_file(int sock, int i, int j, char* namefile, int current_dir)
+  {
+     int temp=1;
+
+     // marking bit map
+
+     fseek(fp, i*sizeof(int), SEEK_SET);
+     fwrite(&temp, sizeof(int), 1, fp);
+
+
+     // creating struct temp for add to te memory
+     inode aux;
+     strcpy(aux.name, namefile);
+     strcpy(aux.type, "file");
+     aux.used = 1;
+     aux.parent_addr = current_dir;
+     aux.addr_i = ( blocks*sizeof(int) + ( inode_qnt * sizeof(inode) ) + (i*block_size));
+     aux.addr_f = aux.addr_i + block_size; // * number_blocks;
+
+     fseek(fp, ( blocks*sizeof(int) + j*sizeof(inode) ), SEEK_SET);
+     fwrite(&aux, sizeof(inode), 1, fp);
+
+
+
+     // referecing nodes vector
+
+      fseek(fp, current_dir, SEEK_SET);
+      fread(&aux, sizeof(inode),1, fp);
+
+
+
+      for (int x = 0; x < 10; x++)
+      {
+         if( aux.nodes[x] == -1 )
+         {
+            // cout<<x<<endl;
+            aux.nodes[x] = (blocks*sizeof(int) + j*sizeof(inode));
+            // cout<<aux.nodes[x]<<endl;
+            fseek(fp, current_dir, SEEK_SET);
+            fwrite(&aux, sizeof(inode),1, fp);
+            return 0;
+         }
+      }
+      return 1;
+
+
+
+
+
+  }
+
+  void create_dir(int sock, char* name, int current_dir)
   {
      inode aux, aux2;
      char message[1024];
-     fseek(fp, current_dir, SEEK_SET);
+     fseek(fp, current_DIR, SEEK_SET);
      for(int i  = 0 ; i < inode_qnt ; i++)
      {
         fread(&aux, sizeof(inode),1,fp);
@@ -394,6 +676,7 @@
         {
            strcpy(aux2.type, "dir");
  		     strcpy(aux2.name, name);
+           aux2.used = 1;
  		     aux2.addr_i=-1;
  		     aux2.addr_f=-1;
  		     aux2.parent_addr=current_dir;
@@ -412,7 +695,7 @@
                  // cout<<x<<endl;
                  aux2.nodes[x] = (blocks*sizeof(int) + i*sizeof(inode));
                  // cout<<aux2.nodes[x]<<endl;
-                 fseek(fp, current_DIR, SEEK_SET);
+                 fseek(fp, current_dir, SEEK_SET);
                  fwrite(&aux2, sizeof(inode),1, fp);
                  strcpy(message, "Directory created with success!");
                  break;
@@ -439,9 +722,68 @@
     // }
     // return;
   }
-
-  void rmv_dir(int sock, char* name)
+  void rmv_dir(int sock, char* name, int current_dir)
   {
+     char msg[1024] = "";
+     rmv_dir_rec(sock, name, current_dir);
+     strcpy(msg, "Directory removed with success!");
+     send(sock, msg, strlen(msg), 0);
+
+  }
+
+  void rmv_dir_rec(int sock, char* name, int current_dir)
+  {
+     inode aux,aux2,aux3, blank;
+     int cont=0;
+     char msg[1024] = "";
+     char buf[1024] = "";
+
+     blank.used = 0;
+     strcpy(blank.name, "blank");
+  	  strcpy(blank.type, "none");
+  	  blank.addr_i = 0;
+  	  blank.addr_f = 0;
+  	  blank.parent_addr = 0;
+
+     fseek(fp, current_dir, SEEK_SET);
+     fread(&aux, sizeof(inode),1,fp);
+     for(int i = 0 ; i < 10 ; i++)
+     {
+        if( aux.nodes[i] != -1)
+        {
+           fseek(fp, aux.nodes[i], SEEK_SET);
+           fread(&aux2, sizeof(inode),1,fp);
+           if( strcmp(aux2.name, name) == 0 )
+           {
+              for(int j = 0; j < 10 ; j++)
+              {
+                 if(aux2.nodes[i] != -1)
+                 {
+                    fseek(fp,aux2.nodes[i],SEEK_SET);
+                    fread(&aux3, sizeof(inode), 1, fp);
+                    if( aux3.type[0] == 'd')
+                    {
+                       rmv_dir(sock, aux3.name, aux3.parent_addr);
+                    }
+                    if( aux3.type[0] == 'f')
+                    {
+                       remove_file_rec(sock, aux2.nodes[i]);
+                    }
+                  }
+               }
+               fseek(fp, aux.nodes[i], SEEK_SET);
+               fwrite(&blank, sizeof(inode), 1, fp);
+
+               // altering reference inodes nodes
+               fseek(fp, current_dir, SEEK_SET);
+               fread(&aux, sizeof(inode), 1, fp);
+               aux.nodes[i] = -1;
+               fseek(fp, current_dir, SEEK_SET);
+               fwrite(&aux, sizeof(inode), 1, fp);
+            }
+         }
+      }
+
     // int read_size;
     // char message[1024];
     // if(rmdir(name) == -1)
