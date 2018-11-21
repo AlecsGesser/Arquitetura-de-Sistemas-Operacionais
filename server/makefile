@@ -1,6 +1,6 @@
-all: server cliente
+all: server client
 
 first: server.cpp
-	gcc -lpthread -Wimplicit-function-declaration -o server server.cpp test.cpp
+	gcc -lpthread -Wimplicit-function-declaration -o server server.cpp
 second: cliente.cpp
-	gcc -o client cliente.cpp -lpthread
+	gcc -o client cliente.cpp
