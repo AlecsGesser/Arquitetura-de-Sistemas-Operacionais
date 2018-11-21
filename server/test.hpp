@@ -277,7 +277,7 @@ void initialize_bin()
 		fwrite(&temp, sizeof(char), 1, fp);
 	}
 
-
+	fclose (fp);
 }
 
 #endif // MEMIO_DEFINED
